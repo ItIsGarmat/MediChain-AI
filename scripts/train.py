@@ -11,8 +11,8 @@ DATASET_DIR = Path("Datasets/Brain Tumor CT scan Images")
 IMG_SIZE = (224, 224)
 BATCH_SIZE = 16
 
-INITIAL_EPOCHS = 3
-FINE_TUNE_EPOCHS = 2
+INITIAL_EPOCHS = 12
+FINE_TUNE_EPOCHS = 12
 
 MODEL_PATH = "brain_tumor_ct_model.keras"
 CLASS_NAMES_PATH = "class_names.json"
@@ -39,7 +39,9 @@ val_ds = tf.keras.utils.image_dataset_from_directory(
     image_size=IMG_SIZE,
     batch_size=BATCH_SIZE,
     label_mode="binary",
-    shuffle=False,
+    # Must match the training loader's shuffle and seed so both subsets are
+    # drawn from the same deterministic, class-mixed file order.
+    shuffle=True,
 )
 
 #naming the classes
@@ -65,6 +67,7 @@ val_ds = val_ds.prefetch(AUTOTUNE)
 augmentation = keras.Sequential([
     layers.RandomRotation(0.03),
     layers.RandomZoom(0.10),
+    layers.RandomContrast(0.10),
 ], name="augmentation")
 
 # MOBILE NET V2
@@ -120,7 +123,19 @@ model.compile(
         learning_rate=1e-3
     ),
     loss="binary_crossentropy",
-    metrics=["accuracy"],
+    metrics=[
+        "accuracy",
+        keras.metrics.Recall(name="tumor_recall"),
+        keras.metrics.Precision(name="tumor_precision"),
+        keras.metrics.AUC(name="auc"),
+    ],
+)
+
+early_stopping = keras.callbacks.EarlyStopping(
+    monitor="val_auc",
+    mode="max",
+    patience=3,
+    restore_best_weights=True,
 )
 
 
@@ -130,6 +145,7 @@ model.fit(
     train_ds,
     validation_data=val_ds,
     epochs=INITIAL_EPOCHS,
+    callbacks=[early_stopping],
 )
 
 print("\nSTAGE 2 — FINE TUNING")
@@ -151,14 +167,26 @@ model.compile(
         learning_rate=1e-5
     ),
     loss="binary_crossentropy",
-    metrics=["accuracy"],
+    metrics=[
+        "accuracy",
+        keras.metrics.Recall(name="tumor_recall"),
+        keras.metrics.Precision(name="tumor_precision"),
+        keras.metrics.AUC(name="auc"),
+    ],
 )
 
+fine_tune_early_stopping = keras.callbacks.EarlyStopping(
+    monitor="val_auc",
+    mode="max",
+    patience=4,
+    restore_best_weights=True,
+)
 
 model.fit(
     train_ds,
     validation_data=val_ds,
     epochs=FINE_TUNE_EPOCHS,
+    callbacks=[fine_tune_early_stopping],
 )
 
 #saving

@@ -35,9 +35,8 @@ def predict_image(image_path):
     # converting image to NumPy array
     image_array = np.array(image, dtype=np.float32)
 
-    # add batch dimension
-    image_array = image_array / 127.5 - 1.0
-
+    # The saved model already rescales raw 0-255 image pixels to MobileNetV2's
+    # expected -1 to 1 range. Keep inference preprocessing identical to training.
     image_array = np.expand_dims(
         image_array,
         axis=0
